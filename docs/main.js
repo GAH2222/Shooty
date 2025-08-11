@@ -1,535 +1,388 @@
-// client/main.js
-// Module script - uses ESM imports from CDN
-import * as THREE from "https://unpkg.com/three@0.152.2/build/three.module.js";
-import { GLTFLoader } from "https://unpkg.com/three@0.152.2/examples/jsm/loaders/GLTFLoader.js";
-import { OrbitControls } from "https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js";
-import { io } from "https://cdn.socket.io/4.7.2/socket.io.esm.min.js";
+// main.js - Client side game logic with UI, physics, chat, menu, etc
 
-/* ---------- CONFIG ---------- */
-const SERVER_URL = "https://shooty-5tse.onrender.com"; // your render URL
-const ASSET_BASE = "assets/"; // client/assets/
-const CHARACTER_FILE = "Shawty1.glb";
-const GUN_FILE = "gun2.glb";
-const MAP_FILE = "the first map!.glb";
-const GUNSHOT_FILE = "gunshot.wav";
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import io from 'socket.io-client';
 
-/* ---------- DOM elements ---------- */
-const menu = document.getElementById("menu");
-const joinBtn = document.getElementById("joinBtn");
-const skinSelect = document.getElementById("skinSelect");
-const loadingScreen = document.getElementById("loadingScreen");
-const loadingText = document.getElementById("loadingText");
-const canvas = document.getElementById("gameCanvas");
-const healthBar = document.getElementById("healthBar");
-const scoreEl = document.getElementById("score");
-const crosshair = document.getElementById("crosshair");
-const chatContainer = document.getElementById("chatContainer");
-const chatMessages = document.getElementById("chatMessages");
-const chatInput = document.getElementById("chatInput");
-const instructions = document.getElementById("instructions");
+const socket = io();
 
-/* ---------- Three.js setup ---------- */
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+let scene, camera, renderer;
+let playerModel, gunModel, mapModel;
+let players = {}; // other players and yourself
+let clock = new THREE.Clock();
+let loader = new GLTFLoader();
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x07102a);
+let move = { forward: false, backward: false, left: false, right: false };
+let canJump = false;
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 2.2, 6);
+let speed = 15;
+let dashSpeed = 30;
+let isDashing = false;
+let dashTime = 0.2;
+let dashCooldown = 1;
+let lastDash = -dashCooldown;
 
-const loader = new GLTFLoader();
-const audioLoader = new THREE.AudioLoader();
+let jumpVelocity = 15;
+let gravity = -30;
 
-/* ---------- lighting ---------- */
-const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-dir.position.set(10, 15, 10);
-scene.add(dir);
-scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+let health = 100;
+const maxHealth = 100;
 
-/* ---------- world objects ---------- */
-let mapRoot = new THREE.Group();
-scene.add(mapRoot);
+let crosshair;
+let loadingScreen, menuScreen, gameUI, chatUI;
 
-/* ---------- player & networking ---------- */
-let socket;
-let localPlayer = {
-  id: null,
-  model: null,
-  gun: null,
-  pos: new THREE.Vector3(0, 5, 0),
-  rotY: 0,
-  vel: new THREE.Vector3(),
-  grounded: false,
-  canDoubleJump: true,
-  dashCooldown: 0,
-  health: 100,
-  alive: true,
-  score: 0,
-  skin: 0
-};
-
-const remotePlayers = {}; // id -> {model, pos, rotY, health, alive, skin}
-
-/* ---------- audio ---------- */
-const listener = new THREE.AudioListener();
-camera.add(listener);
-const gunshotSound = new THREE.Audio(listener);
-
-/* load audio file */
-audioLoader.load(ASSET_BASE + GUNSHOT_FILE, buffer => {
-  gunshotSound.setBuffer(buffer);
-  gunshotSound.setVolume(0.5);
-});
-
-/* ---------- input ---------- */
-const keys = {};
-let mouseDown = false;
-let pointerLocked = false;
 let chatOpen = false;
-let isBoost = false; // F key held
+let chatInput;
+let chatMessages = [];
 
-window.addEventListener("keydown", (e) => {
-  if (chatOpen) return;
-  keys[e.code] = true;
-  if (e.code === "KeyT") {
-    openChat();
-  } else if (e.code === "Escape") {
-    document.exitPointerLock();
-  } else if (e.code === "KeyF") {
-    isBoost = true;
-  }
-});
+let selectedSkin = 0;
+const skins = ['Shawty1.glb', 'Shawty2.glb']; // two skins placeholder
 
-window.addEventListener("keyup", (e) => {
-  keys[e.code] = false;
-  if (e.code === "KeyF") isBoost = false;
-});
+// UI Elements
+const container = document.getElementById('container');
 
-canvas.addEventListener("mousedown", e => {
-  if (!pointerLocked) canvas.requestPointerLock();
-  mouseDown = true;
-  if (!chatOpen) shoot();
-});
-window.addEventListener("mouseup", () => mouseDown = false);
+init();
 
-document.addEventListener("pointerlockchange", () => {
-  pointerLocked = document.pointerLockElement === canvas;
-});
+function init() {
+  // Renderer
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
 
-chatInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    const msg = chatInput.value.trim();
-    if (msg.length > 0 && socket) {
-      socket.emit("chatMessage", msg);
-      addChatMessage("You: " + msg);
-    }
-    closeChat();
-  } else if (e.key === "Escape") {
-    closeChat();
-  }
-});
+  // Scene
+  scene = new THREE.Scene();
 
-/* ---------- UI helpers ---------- */
-function showLoading(text = "Loading...") {
-  loadingText.textContent = text;
-  loadingScreen.classList.remove("hidden");
+  // Camera
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 5, 10);
+
+  // Light
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(10, 20, 10);
+  scene.add(light);
+
+  const ambient = new THREE.AmbientLight(0x404040);
+  scene.add(ambient);
+
+  // Crosshair
+  crosshair = document.createElement('div');
+  crosshair.id = 'crosshair';
+  document.body.appendChild(crosshair);
+
+  // Loading screen
+  loadingScreen = document.getElementById('loadingScreen');
+  menuScreen = document.getElementById('menuScreen');
+  gameUI = document.getElementById('gameUI');
+  chatUI = document.getElementById('chatUI');
+  chatInput = document.getElementById('chatInput');
+  chatInput.addEventListener('keydown', onChatInput);
+
+  // Hide game UI & chat & crosshair initially
+  gameUI.style.display = 'none';
+  chatUI.style.display = 'none';
+  crosshair.style.display = 'none';
+
+  // Load map
+  loader.load('assets/the first map!.glb', gltf => {
+    mapModel = gltf.scene;
+    scene.add(mapModel);
+
+    // Setup menu after map loaded
+    setupMenu();
+
+    // Show menu screen, hide loading
+    loadingScreen.style.display = 'none';
+    menuScreen.style.display = 'flex';
+  });
+
+  window.addEventListener('resize', onWindowResize);
+
+  // Keyboard controls
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+
+  // Mouse controls
+  document.addEventListener('mousedown', onMouseDown);
+
+  animate();
 }
-function hideLoading() {
-  loadingScreen.classList.add("hidden");
+
+function setupMenu() {
+  // Populate skins selector dynamically or just simple buttons here
+  const skinButtons = document.getElementById('skinButtons');
+  skins.forEach((skin, i) => {
+    const btn = document.createElement('button');
+    btn.innerText = `Skin ${i+1}`;
+    btn.classList.add('skinBtn');
+    if(i === selectedSkin) btn.classList.add('selected');
+    btn.onclick = () => {
+      selectedSkin = i;
+      document.querySelectorAll('.skinBtn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    };
+    skinButtons.appendChild(btn);
+  });
+
+  // Play button
+  const playBtn = document.getElementById('playButton');
+  playBtn.onclick = () => {
+    startGame();
+  };
+}
+
+function startGame() {
+  menuScreen.style.display = 'none';
+  loadingScreen.style.display = 'flex';
+  loadingScreen.querySelector('p').innerText = 'Loading Game...';
+
+  // Load player model & gun based on skin
+  loader.load(`assets/${skins[selectedSkin]}`, gltf => {
+    playerModel = gltf.scene;
+    playerModel.scale.set(1,1,1);
+    scene.add(playerModel);
+
+    loader.load('assets/gun2.glb', gltfGun => {
+      gunModel = gltfGun.scene;
+      playerModel.add(gunModel);
+      gunModel.position.set(0.5, 1, 0);
+      gunModel.scale.set(0.7,0.7,0.7);
+
+      // After all loaded, join server
+      joinServer();
+    });
+  });
+}
+
+function joinServer() {
+  socket.emit('joinGame', { skin: skins[selectedSkin] });
+
+  socket.on('gameData', data => {
+    // Update other players & their positions
+    updatePlayers(data.players);
+    loadingScreen.style.display = 'none';
+    gameUI.style.display = 'block';
+    crosshair.style.display = 'block';
+  });
+
+  socket.on('playerHit', data => {
+    if(data.id === socket.id) {
+      health -= data.damage;
+      if(health <= 0) {
+        die();
+      }
+      updateHealthBar();
+    }
+  });
+
+  socket.on('chatMessage', data => {
+    addChatMessage(data.playerName + ': ' + data.message);
+  });
+}
+
+function updatePlayers(serverPlayers) {
+  // Add/update other players except self
+  for(let id in serverPlayers) {
+    if(id === socket.id) continue;
+    let p = serverPlayers[id];
+    if(!players[id]) {
+      // Add new player
+      loader.load(`assets/${p.skin}`, gltf => {
+        const model = gltf.scene;
+        model.scale.set(1,1,1);
+        scene.add(model);
+        players[id] = { model: model, health: maxHealth };
+      });
+    } else {
+      // Update position & rotation
+      if(players[id].model) {
+        players[id].model.position.set(p.position.x, p.position.y, p.position.z);
+        players[id].model.rotation.y = p.rotationY;
+      }
+    }
+  }
+}
+
+function onKeyDown(event) {
+  if(chatOpen) {
+    if(event.key === 'Escape') {
+      closeChat();
+    }
+    return;
+  }
+
+  switch(event.code) {
+    case 'KeyW': move.forward = true; break;
+    case 'KeyS': move.backward = true; break;
+    case 'KeyA': move.left = true; break;
+    case 'KeyD': move.right = true; break;
+    case 'Space': if(canJump) jump(); break;
+    case 'KeyQ': dash(); break;
+    case 'KeyT': openChat(); break;
+  }
+}
+
+function onKeyUp(event) {
+  switch(event.code) {
+    case 'KeyW': move.forward = false; break;
+    case 'KeyS': move.backward = false; break;
+    case 'KeyA': move.left = false; break;
+    case 'KeyD': move.right = false; break;
+  }
+}
+
+function onMouseDown(event) {
+  if(chatOpen) return;
+  if(event.button === 0) { // left click shoot
+    shoot();
+  }
+}
+
+function jump() {
+  velocity.y = jumpVelocity;
+  canJump = false;
+}
+
+function dash() {
+  const timeNow = clock.getElapsedTime();
+  if(timeNow - lastDash < dashCooldown) return;
+
+  lastDash = timeNow;
+  isDashing = true;
+  setTimeout(() => { isDashing = false; }, dashTime * 1000);
+}
+
+function shoot() {
+  // Play gunshot sound
+  const audio = new Audio('assets/gunshot.wav');
+  audio.play();
+
+  // Recoil if F pressed
+  if(keysPressed['KeyF']) {
+    // Propel player backwards
+    velocity.z -= 30;
+    // Shoot no damage
+    socket.emit('shoot', { damage: 0 });
+  } else {
+    // Shoot with damage
+    socket.emit('shoot', { damage: 10 });
+  }
+}
+
+let keysPressed = {};
+document.addEventListener('keydown', (e) => { keysPressed[e.code] = true; });
+document.addEventListener('keyup', (e) => { keysPressed[e.code] = false; });
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const delta = clock.getDelta();
+
+  updatePhysics(delta);
+
+  renderer.render(scene, camera);
+}
+
+function updatePhysics(delta) {
+  // Basic gravity
+  velocity.y += gravity * delta;
+
+  // Movement direction
+  direction.z = Number(move.forward) - Number(move.backward);
+  direction.x = Number(move.right) - Number(move.left);
+  direction.normalize();
+
+  // Move playerModel
+  if(playerModel) {
+    if(isDashing) {
+      playerModel.position.x += direction.x * dashSpeed * delta;
+      playerModel.position.z += direction.z * dashSpeed * delta;
+    } else {
+      playerModel.position.x += direction.x * speed * delta;
+      playerModel.position.z += direction.z * speed * delta;
+    }
+
+    // Apply vertical velocity
+    playerModel.position.y += velocity.y * delta;
+
+    // Prevent going below map floor (assumed y=0)
+    if(playerModel.position.y < 0) {
+      health = 0;
+      die();
+    }
+
+    // Simple collision with map bounds (you should do better collision with actual map model)
+    if(playerModel.position.x < -50) playerModel.position.x = -50;
+    if(playerModel.position.x > 50) playerModel.position.x = 50;
+    if(playerModel.position.z < -50) playerModel.position.z = -50;
+    if(playerModel.position.z > 50) playerModel.position.z = 50;
+
+    // Reset jump if on ground (y=0)
+    if(playerModel.position.y <= 0) {
+      canJump = true;
+      velocity.y = 0;
+      playerModel.position.y = 0;
+    }
+
+    // Update camera behind player
+    camera.position.lerp(new THREE.Vector3(playerModel.position.x, playerModel.position.y + 5, playerModel.position.z + 10), 0.1);
+    camera.lookAt(playerModel.position);
+  }
+
+  // Send position to server
+  socket.emit('move', {
+    x: playerModel.position.x,
+    y: playerModel.position.y,
+    z: playerModel.position.z,
+    rotationY: playerModel.rotation.y,
+  });
+}
+
+function die() {
+  alert('You died!');
+  window.location.reload();
+}
+
+function updateHealthBar() {
+  const healthBar = document.getElementById('healthBar');
+  healthBar.style.width = `${(health/maxHealth)*100}%`;
 }
 
 function openChat() {
   chatOpen = true;
-  chatContainer.classList.remove("chat-hidden");
+  chatUI.style.display = 'block';
   chatInput.focus();
 }
+
 function closeChat() {
   chatOpen = false;
-  chatContainer.classList.add("chat-hidden");
-  chatInput.value = "";
-  canvas.focus();
-}
-function addChatMessage(text) {
-  const d = document.createElement("div");
-  d.textContent = text;
-  chatMessages.appendChild(d);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+  chatUI.style.display = 'none';
+  chatInput.value = '';
 }
 
-/* ---------- load assets ---------- */
-async function loadMap() {
-  return new Promise((res, rej) => {
-    loader.load(ASSET_BASE + MAP_FILE, gltf => {
-      mapRoot.clear();
-      mapRoot.add(gltf.scene);
-      res();
-    }, xhr => {
-      // progress
-    }, err => rej(err));
-  });
-}
-
-async function loadCharacterModel() {
-  return new Promise((res, rej) => {
-    loader.load(ASSET_BASE + CHARACTER_FILE, gltf => {
-      res(gltf.scene);
-    }, null, rej);
-  });
-}
-
-async function loadGunModel() {
-  return new Promise((res, rej) => {
-    loader.load(ASSET_BASE + GUN_FILE, gltf => {
-      res(gltf.scene);
-    }, null, rej);
-  });
-}
-
-/* ---------- spawn local player model ---------- */
-async function spawnLocalPlayer(skinIndex = 0) {
-  showLoading("Loading character...");
-  const model = await loadCharacterModel();
-  // scale and center if needed
-  model.scale.set(1,1,1);
-  model.position.copy(localPlayer.pos);
-  scene.add(model);
-  localPlayer.model = model;
-
-  // gun
-  const gun = await loadGunModel();
-  gun.scale.set(1,1,1);
-  gun.position.set(0.2, -0.2, -0.6);
-  model.add(gun);
-  localPlayer.gun = gun;
-
-  hideLoading();
-}
-
-/* ---------- network handling ---------- */
-function setupSocket(skinIndex) {
-  showLoading("Connecting to server...");
-  socket = io(SERVER_URL, { transports: ["websocket", "polling"] });
-
-  socket.on("connect", () => {
-    localPlayer.id = socket.id;
-    localPlayer.skin = skinIndex;
-    hideLoading();
-    addChatMessage("Connected to server.");
-  });
-
-  socket.on("currentPlayers", players => {
-    // create remote players
-    for (const id in players) {
-      const p = players[id];
-      if (id === socket.id) continue;
-      createRemotePlayer(id, p);
-    }
-  });
-
-  socket.on("newPlayer", p => {
-    createRemotePlayer(p.id, p);
-  });
-
-  socket.on("playerMoved", data => {
-    if (data.id === socket.id) return;
-    const r = remotePlayers[data.id];
-    if (r) {
-      r.pos.set(data.x, data.y, data.z);
-      r.skin = data.skin ?? r.skin;
-      r.model.position.copy(r.pos);
-      r.model.rotation.y = data.rotY || r.model.rotation.y;
-    }
-  });
-
-  socket.on("playerDisconnected", id => {
-    removeRemotePlayer(id);
-  });
-
-  socket.on("chatMessage", data => {
-    addChatMessage(data.id + ": " + data.msg);
-  });
-
-  socket.on("playerShot", data => {
-    // play sound and optionally bullet tracer
-    if (gunshotSound.isPlaying) gunshotSound.stop();
-    gunshotSound.play();
-  });
-
-  socket.on("playerHit", data => {
-    if (data.id === localPlayer.id) {
-      localPlayer.health = data.health;
-      updateHealthUI();
-    }
-  });
-
-  socket.on("playerDied", data => {
-    if (data.id === localPlayer.id) {
-      // show death effect
-      localPlayer.alive = false;
-      addChatMessage("You died.");
-      // respawn handled by server
-    } else {
-      addChatMessage((data.killer ? data.killer : "Someone") + " killed " + data.id);
-    }
-  });
-
-  socket.on("playerRespawn", data => {
-    const id = data.id;
-    if (id === localPlayer.id) {
-      localPlayer.pos.set(data.x, data.y, data.z);
-      localPlayer.health = data.health;
-      localPlayer.alive = true;
-      if (localPlayer.model) localPlayer.model.position.copy(localPlayer.pos);
-      updateHealthUI();
-    } else {
-      const r = remotePlayers[id];
-      if (r) {
-        r.pos.set(data.x, data.y, data.z);
-        r.model.position.copy(r.pos);
-        r.health = data.health;
-        r.alive = true;
-      }
-    }
-  });
-
-  socket.on("applyImpulse", data => {
-    if (data.id === localPlayer.id) {
-      // small local impulse
-      const imp = data.impulse;
-      localPlayer.vel.x += imp.ix;
-      localPlayer.vel.y += imp.iy;
-      localPlayer.vel.z += imp.iz;
-    }
-  });
-}
-
-/* ---------- remote players ---------- */
-async function createRemotePlayer(id, pdata) {
-  // simple visual: clone the base character to represent others
-  const model = await loadCharacterModel();
-  model.scale.set(1,1,1);
-  const pos = new THREE.Vector3(pdata.x || 0, pdata.y || 0, pdata.z || 0);
-  model.position.copy(pos);
-  scene.add(model);
-  remotePlayers[id] = { model, pos, rotY: pdata.rotY || 0, health: pdata.health || 100, alive: pdata.alive ?? true, skin: pdata.skin || 0 };
-}
-
-/* ---------- cleanup ---------- */
-function removeRemotePlayer(id) {
-  const r = remotePlayers[id];
-  if (!r) return;
-  scene.remove(r.model);
-  if (r.model.dispose) r.model.dispose();
-  delete remotePlayers[id];
-}
-
-/* ---------- movement + physics (very simplified) ---------- */
-function applyMovement(dt) {
-  if (!localPlayer.model || !localPlayer.alive) return;
-
-  const speed = 8.5; // units per second
-  const dashImpulse = 10;
-  const friction = 8.0;
-  const gravity = -30;
-
-  // input direction in camera space
-  const forward = new THREE.Vector3();
-  camera.getWorldDirection(forward);
-  forward.y = 0;
-  forward.normalize();
-
-  const right = new THREE.Vector3();
-  right.copy(forward).applyAxisAngle(new THREE.Vector3(0,1,0), Math.PI/2);
-
-  let moveDir = new THREE.Vector3();
-  if (keys["KeyW"]) moveDir.add(forward);
-  if (keys["KeyS"]) moveDir.sub(forward);
-  if (keys["KeyA"]) moveDir.sub(right);
-  if (keys["KeyD"]) moveDir.add(right);
-  if (moveDir.lengthSq() > 0) moveDir.normalize();
-
-  // horizontal velocity control
-  const targetVel = moveDir.multiplyScalar(speed);
-  // lerp localPlayer.vel.xz toward targetVel
-  localPlayer.vel.x = THREE.MathUtils.damp(localPlayer.vel.x, targetVel.x, friction, dt);
-  localPlayer.vel.z = THREE.MathUtils.damp(localPlayer.vel.z, targetVel.z, friction, dt);
-
-  // jump
-  if (keys["Space"]) {
-    if (localPlayer.grounded) {
-      localPlayer.vel.y = 10;
-      localPlayer.grounded = false;
-      localPlayer.canDoubleJump = true;
-    } else if (localPlayer.canDoubleJump) {
-      localPlayer.vel.y = 10;
-      localPlayer.canDoubleJump = false;
-    }
-    // prevent repeated jumps in single press
-    keys["Space"] = false;
-  }
-
-  // dash (Q)
-  if (keys["KeyQ"] && localPlayer.dashCooldown <= 0) {
-    // dash in moveDir or forward if stationary
-    const dir = moveDir.lengthSq() > 0 ? moveDir.clone().normalize() : forward.clone();
-    localPlayer.vel.addScaledVector(dir, dashImpulse);
-    localPlayer.dashCooldown = 0.5; // seconds
-    keys["KeyQ"] = false;
-  }
-
-  // integrate gravity
-  localPlayer.vel.y += gravity * dt;
-
-  // integrate position
-  localPlayer.pos.addScaledVector(localPlayer.vel, dt);
-
-  // simple ground collision: assume ground at y=0
-  if (localPlayer.pos.y <= 0.15) {
-    localPlayer.pos.y = 0.15;
-    localPlayer.vel.y = 0;
-    localPlayer.grounded = true;
-  } else {
-    localPlayer.grounded = false;
-  }
-
-  // simple player-player collision: push apart if overlapping
-  for (const id in remotePlayers) {
-    const r = remotePlayers[id];
-    const dist = r.pos.distanceTo(localPlayer.pos);
-    const minSep = 1.0;
-    if (dist > 0 && dist < minSep) {
-      const push = localPlayer.pos.clone().sub(r.pos).normalize().multiplyScalar((minSep - dist) * 0.5);
-      localPlayer.pos.add(push);
-      r.pos.sub(push);
-      r.model.position.copy(r.pos);
+function onChatInput(e) {
+  if(e.key === 'Enter') {
+    if(chatInput.value.trim() !== '') {
+      socket.emit('chatMessage', chatInput.value.trim());
+      addChatMessage('You: ' + chatInput.value.trim());
+      chatInput.value = '';
+      closeChat();
     }
   }
-
-  // map boundaries fallback: if too far away, clamp
-  const limit = 200;
-  localPlayer.pos.x = THREE.MathUtils.clamp(localPlayer.pos.x, -limit, limit);
-  localPlayer.pos.z = THREE.MathUtils.clamp(localPlayer.pos.z, -limit, limit);
-
-  // update model transform
-  localPlayer.model.position.copy(localPlayer.pos);
-  // rotate model to movement direction if moving
-  if (localPlayer.vel.x * localPlayer.vel.x + localPlayer.vel.z * localPlayer.vel.z > 0.1) {
-    const ang = Math.atan2(localPlayer.vel.x, localPlayer.vel.z);
-    localPlayer.model.rotation.y = ang;
-  }
-
-  // reduce dash cooldown
-  localPlayer.dashCooldown = Math.max(0, (localPlayer.dashCooldown || 0) - dt);
 }
 
-/* ---------- shooting ---------- */
-function shoot() {
-  if (!socket || !localPlayer.alive) return;
-
-  // camera-based origin & direction
-  const origin = new THREE.Vector3();
-  const dir = new THREE.Vector3();
-  origin.copy(camera.position);
-  camera.getWorldDirection(dir);
-  dir.normalize();
-
-  // play local sound
-  if (gunshotSound.isPlaying) gunshotSound.stop();
-  gunshotSound.play();
-
-  // send shoot to server
-  socket.emit("shoot", {
-    origin: { x: origin.x, y: origin.y, z: origin.z },
-    dir: { x: dir.x, y: dir.y, z: dir.z },
-    isBoost: isBoost,
-    range: 60,
-    damage: 25
-  });
-
-  // recoil on client
-  if (isBoost) {
-    // boost shot: small camera kick and local velocity impulse (server also applies)
-    localPlayer.vel.addScaledVector(dir, -8);
-    localPlayer.vel.y += 2;
-  } else {
-    // small recoil
-    localPlayer.vel.addScaledVector(dir, -2);
-  }
+function addChatMessage(msg) {
+  const chatMessagesDiv = document.getElementById('chatMessages');
+  const msgElem = document.createElement('div');
+  msgElem.textContent = msg;
+  chatMessagesDiv.appendChild(msgElem);
+  chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
 }
 
-/* ---------- UI updates ---------- */
-function updateHealthUI() {
-  const pct = Math.max(0, Math.min(1, localPlayer.health / 100));
-  healthBar.style.width = (pct * 100) + "%";
-  scoreEl.textContent = "Score: " + (localPlayer.score || 0);
-}
-
-/* ---------- main loop ---------- */
-let lastTime = performance.now();
-let acc = 0;
-function animate() {
-  requestAnimationFrame(animate);
-  const now = performance.now();
-  const dt = Math.min(0.05, (now - lastTime) / 1000);
-  lastTime = now;
-
-  if (localPlayer.model) {
-    applyMovement(dt);
-    // camera follow
-    const camTarget = localPlayer.pos.clone().add(new THREE.Vector3(0, 1.6, 0));
-    camera.position.lerp(camTarget.clone().add(new THREE.Vector3(0, 2.3, 6).applyAxisAngle(new THREE.Vector3(0,1,0), localPlayer.model.rotation.y)), 0.08);
-    camera.lookAt(camTarget);
-
-    // send position update to server at ~20Hz (simple throttle)
-    acc += dt;
-    if (acc > 0.05) {
-      acc = 0;
-      if (socket) {
-        socket.emit("move", {
-          x: localPlayer.pos.x, y: localPlayer.pos.y, z: localPlayer.pos.z,
-          rotY: localPlayer.model.rotation.y,
-          skin: localPlayer.skin,
-          vx: localPlayer.vel.x, vy: localPlayer.vel.y, vz: localPlayer.vel.z
-        });
-      }
-    }
-  }
-
-  // render
-  renderer.render(scene, camera);
-}
-requestAnimationFrame(animate);
-
-/* ---------- start & UI wiring ---------- */
-joinBtn.addEventListener("click", async () => {
-  const skinIndex = parseInt(skinSelect.value || "0", 10);
-  menu.style.display = "none";
-  showLoading("Loading map and character...");
-  try {
-    await loadMap();
-    await spawnLocalPlayer(skinIndex);
-    setupSocket(skinIndex);
-    hideLoading();
-    instructions.style.display = "block";
-  } catch (err) {
-    console.error("Load failed", err);
-    loadingText.textContent = "Failed to load assets. Check console.";
-  }
-});
-
-/* ---------- window resize ---------- */
-window.addEventListener("resize", () => {
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera.aspect = window.innerWidth / window.innerHeight;
+function onWindowResize() {
+  camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
-});
-
-/* ---------- helpful debug: click to lock pointer ---------- */
-canvas.addEventListener("click", () => {
-  if (!pointerLocked) canvas.requestPointerLock();
-});
-
-/* initial UI state */
-updateHealthUI();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
