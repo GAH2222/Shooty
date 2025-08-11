@@ -1,1 +1,42 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #111;
+    font-family: sans-serif;
+    color: white;
+}
+#menu {
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+}
+#gameCanvas {
+    display: none;
+}
+#chatContainer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 300px;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    flex-direction: column;
+}
+#chatMessages {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 200px;
+    padding: 5px;
+}
+#chatInput {
+    width: 100%;
+    border: none;
+    padding: 5px;
+}
 
