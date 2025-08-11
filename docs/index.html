@@ -1,69 +1,36 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Shoooty</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Stylish Menu -->
-  <div id="menu" class="menu-card">
-    <div class="logo">SHOOOO<span>TY</span></div>
-    <div class="menu-body">
-      <div class="skins">
-        <div class="skin-preview" id="skinPreview">
-          <div class="placeholder">3D preview</div>
-        </div>
-        <div class="skin-controls">
-          <label for="skinSelect">Choose skin</label>
-          <select id="skinSelect">
-            <option value="0">Default Shawty</option>
-            <option value="1">Future Skin (placeholder)</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="buttons">
-        <button id="joinBtn" class="btn-epic">Join Game</button>
-        <button id="howBtn" class="btn-ghost">How to play</button>
-      </div>
-    </div>
-    <div class="menu-footer">WASD • Space double jump • Q dash • Click shoot • F + Click = boost-shot (no damage)</div>
+  <div id="loadingScreen">
+    <p>Loading...</p>
   </div>
 
-  <!-- Loading Screen -->
-  <div id="loadingScreen" class="overlay hidden">
-    <div class="loader">
-      <div class="spinner"></div>
-      <div id="loadingText">Loading assets...</div>
-    </div>
+  <div id="menuScreen">
+    <h1>Shoooty</h1>
+    <div id="skinButtons"></div>
+    <button id="playButton">Play</button>
   </div>
 
-  <!-- Game Canvas -->
-  <canvas id="gameCanvas"></canvas>
-
-  <!-- HUD -->
-  <div id="hud">
-    <div id="healthContainer">
+  <div id="gameUI">
+    <div id="healthBarContainer">
       <div id="healthBar"></div>
     </div>
-    <div id="score">Score: 0</div>
+  </div>
+
+  <div id="chatUI">
+    <div id="chatMessages"></div>
+    <input type="text" id="chatInput" placeholder="Type your message..." />
   </div>
 
   <!-- Crosshair -->
-  <div id="crosshair">+</div>
+  <div id="crosshair"></div>
 
-  <!-- Chat -->
-  <div id="chatContainer" class="chat-hidden">
-    <div id="chatMessages"></div>
-    <input id="chatInput" placeholder="Press T to chat..." />
-  </div>
-
-  <!-- Small instructions overlay -->
-  <div id="instructions">Press T to chat • Esc to unlock mouse</div>
-
-  <!-- Module scripts -->
   <script type="module" src="main.js"></script>
 </body>
 </html>
