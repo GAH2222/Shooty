@@ -1,6 +1,6 @@
 // NO import statements here — THREE, GLTFLoader, and io come from global scripts
 
-const socket = io();
+const socket = io(https://shooty-5tse.onrender.com);
 
 let scene, camera, renderer;
 let playerModel, gunModel, mapModel;
