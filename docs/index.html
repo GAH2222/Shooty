@@ -5,32 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Shoooty</title>
   <link rel="stylesheet" href="style.css" />
+
+  <!-- THREE.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+  <!-- GLTFLoader -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+
+  <!-- Socket.io -->
+  <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
+
+  <!-- Loading Screen -->
   <div id="loadingScreen">
-    <p>Loading...</p>
+    <p>Loading Map...</p>
   </div>
 
+  <!-- Menu Screen -->
   <div id="menuScreen">
     <h1>Shoooty</h1>
     <div id="skinButtons"></div>
     <button id="playButton">Play</button>
   </div>
 
+  <!-- Game UI -->
   <div id="gameUI">
     <div id="healthBarContainer">
       <div id="healthBar"></div>
     </div>
   </div>
 
+  <!-- Chat UI -->
   <div id="chatUI">
     <div id="chatMessages"></div>
-    <input type="text" id="chatInput" placeholder="Type your message..." />
+    <input id="chatInput" type="text" placeholder="Type message and press Enter" />
   </div>
 
   <!-- Crosshair -->
   <div id="crosshair"></div>
 
-  <script type="module" src="main.js"></script>
+  <!-- Main game script -->
+  <script src="main.js"></script>
 </body>
 </html>
