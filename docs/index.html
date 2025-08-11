@@ -1,35 +1,69 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Shoooty</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <title>Shoooty</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div id="menu">
-    <h1>Shoooty</h1>
-    <p>Select your skin:</p>
-    <select id="skinSelect">
-        <option value="0">Default Shawty</option>
-        <option value="1">Future Skin (placeholder)</option>
-    </select>
-    <button id="joinBtn">Join Game</button>
-</div>
+  <!-- Stylish Menu -->
+  <div id="menu" class="menu-card">
+    <div class="logo">SHOOOO<span>TY</span></div>
+    <div class="menu-body">
+      <div class="skins">
+        <div class="skin-preview" id="skinPreview">
+          <div class="placeholder">3D preview</div>
+        </div>
+        <div class="skin-controls">
+          <label for="skinSelect">Choose skin</label>
+          <select id="skinSelect">
+            <option value="0">Default Shawty</option>
+            <option value="1">Future Skin (placeholder)</option>
+          </select>
+        </div>
+      </div>
 
-<canvas id="gameCanvas"></canvas>
+      <div class="buttons">
+        <button id="joinBtn" class="btn-epic">Join Game</button>
+        <button id="howBtn" class="btn-ghost">How to play</button>
+      </div>
+    </div>
+    <div class="menu-footer">WASD • Space double jump • Q dash • Click shoot • F + Click = boost-shot (no damage)</div>
+  </div>
 
-<div id="chatContainer">
+  <!-- Loading Screen -->
+  <div id="loadingScreen" class="overlay hidden">
+    <div class="loader">
+      <div class="spinner"></div>
+      <div id="loadingText">Loading assets...</div>
+    </div>
+  </div>
+
+  <!-- Game Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="healthContainer">
+      <div id="healthBar"></div>
+    </div>
+    <div id="score">Score: 0</div>
+  </div>
+
+  <!-- Crosshair -->
+  <div id="crosshair">+</div>
+
+  <!-- Chat -->
+  <div id="chatContainer" class="chat-hidden">
     <div id="chatMessages"></div>
-    <input type="text" id="chatInput" placeholder="Type message...">
-</div>
+    <input id="chatInput" placeholder="Press T to chat..." />
+  </div>
 
-<script src="libs/three.min.js"></script>
-<script src="libs/GLTFLoader.js"></script>
-<script src="libs/socket.io.min.js"></script>
-<script src="menu.js"></script>
-<script src="physics.js"></script>
-<script src="chat.js"></script>
-<script src="game.js"></script>
+  <!-- Small instructions overlay -->
+  <div id="instructions">Press T to chat • Esc to unlock mouse</div>
+
+  <!-- Module scripts -->
+  <script type="module" src="main.js"></script>
 </body>
 </html>
-
