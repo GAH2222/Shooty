@@ -1,6 +1,4 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import io from 'socket.io-client';
+// NO import statements here — THREE, GLTFLoader, and io come from global scripts
 
 const socket = io();
 
@@ -8,7 +6,7 @@ let scene, camera, renderer;
 let playerModel, gunModel, mapModel;
 let players = {};
 let clock = new THREE.Clock();
-let loader = new GLTFLoader();
+let loader = new THREE.GLTFLoader();
 
 let move = { forward: false, backward: false, left: false, right: false };
 let canJump = false;
@@ -58,9 +56,7 @@ function init() {
   const ambient = new THREE.AmbientLight(0x404040);
   scene.add(ambient);
 
-  crosshair = document.createElement('div');
-  crosshair.id = 'crosshair';
-  document.body.appendChild(crosshair);
+  crosshair = document.getElementById('crosshair');
 
   loadingScreen = document.getElementById('loadingScreen');
   menuScreen = document.getElementById('menuScreen');
